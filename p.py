@@ -63,28 +63,29 @@ class ClicksCaptor:
 o = extractBackground(i,c)
 ## create array to store image of warped football field
 ## 1112 x 745
-field = np.zeros([1920,1287])
+field = np.zeros([1112,745])
 TL = (float(0), float(0))
 TR = (float(1112), float(0))
 BL = (float(0), float(745))
 BR = (float(1112), float(745))
-fieldCoords = [BR, BL, TL, TR]
+fieldCoords = [TL, TR, BR, BL]
 #clicksCaptor = ClicksCaptor()
 #clicksCaptor.getCoordsByClick(o)
 #birdEyeCoords = clicksCaptor.coords
 #print birdEyeCoords
-aTL = (float(643),float(50))
-aTR = (float(1143), float(47))
-aBL = (float(36), float(226))
-aBR = (float(1868),float(2230))
+aTL = (float(643),float(52))
+aTR = (float(1143), float(50))
+aBR = (float(1880),float(223))
+aBL = (float(20), float(226))
 birdEyeCoords = [aTL, aTR, aBR, aBL]
 print fieldCoords
+print birdEyeCoords
 
-Hmatrix, status = cv2.findHomography(np.array(fieldCoords), np.array(birdEyeCoords), 0)
+Hmatrix, status = cv2.findHomography(np.array(birdEyeCoords), np.array(fieldCoords), 0)
 print Hmatrix
 #M = cv2.getPerspectiveTransform(fieldCoords, birdEyeCoords)
 #print M
-o2 = cv2.warpPerspective(o.astype('float32'), Hmatrix.astype('float32'), field.shape)
+o2 = cv2.warpPerspective(o, Hmatrix, field.shape)
 cv2.imwrite('outpu2.jpg', o2)
 cv2.imwrite('output.jpg', o)
 print len(o), len(o[0])
