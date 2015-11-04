@@ -6,36 +6,6 @@ sys.path.append('/usr/local/lib/python2.7/site-packages')
 import cv2, numpy as np
 from matplotlib import pyplot
 
-def readVideo(inputPath):
-    cap = cv2.VideoCapture(inputPath)
-    frameWidth = int(cap.get(cv2.cv.CV_CAP_PROP_FRAME_WIDTH))
-    frameHeight = int(cap.get(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT))
-    frameRate = int(cap.get(cv2.cv.CV_CAP_PROP_FPS))
-    frameCount = int(cap.get(cv2.cv.CV_CAP_PROP_FRAME_COUNT))
-    frameFourCC = int(cap.get(cv2.cv.CV_CAP_PROP_FOURCC))
-    return cap, frameWidth, frameHeight, frameRate, frameCount, frameFourCC
-
-def extractBackground(videoStream, frameCount):
-    _,img = videoStream.read()
-    avgImg = np.float32(img)
-    #vr = cv2.VideoWriter('output.avi', cv2.cv.CV_FOURCC("M","P","4","2"), r, (w,h))
-    for fr in range(1,100): # TODO: change back to frameCount
-        _,img = videoStream.read()
-        avgImg = avgImg * ((fr)/float(fr+1)) + ( np.float32(img) / (fr + 1) );
-        normImg = cv2.convertScaleAbs(avgImg) # convert into uint8 image
-        #vr.write(normImg)
-        #cv2.imshow('img',img)
-        #cv2.imshow('normImg', normImg)
-    #vr.release()
-    return cv2.convertScaleAbs(avgImg)
-
-i,w,h,r,c,cc = readVideo('input.avi')
-print '[WIDTH] ', w
-print '[HEIGHT]', h
-print '[RATE]  ', r
-print '[FRAMES]', c
-print '[FOURCC]', cc
-
 class ClicksCaptor:
     FIELD_DISPLAY_NAME = 'Field'
     coords = []
@@ -59,6 +29,36 @@ class ClicksCaptor:
             key = cv2.waitKey(10) & 0xff
             if key == 27 or self.nClicks >= 4:
                 break
+
+def readVideo(inputPath):
+    cap = cv2.VideoCapture(inputPath)
+    frameWidth = int(cap.get(cv2.cv.CV_CAP_PROP_FRAME_WIDTH))
+    frameHeight = int(cap.get(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT))
+    frameRate = int(cap.get(cv2.cv.CV_CAP_PROP_FPS))
+    frameCount = int(cap.get(cv2.cv.CV_CAP_PROP_FRAME_COUNT))
+    frameFourCC = int(cap.get(cv2.cv.CV_CAP_PROP_FOURCC))
+    return cap, frameWidth, frameHeight, frameRate, frameCount, frameFourCC
+
+def extractBackground(videoStream, frameCount):
+    _,img = videoStream.read()
+    avgImg = np.float32(img)
+    vr = cv2.VideoWriter('output.avi', cv2.cv.CV_FOURCC("M","P","4","2"), r, (w,h))
+    for fr in range(1,50): # TODO: change back to frameCount
+        _,img = videoStream.read()
+        avgImg = avgImg * ((fr)/float(fr+1)) + ( np.float32(img) / (fr + 1) );
+        normImg = cv2.convertScaleAbs(avgImg) # convert into uint8 image
+        vr.write(normImg)
+        #cv2.imshow('img',img)
+        #cv2.imshow('normImg', normImg)
+    vr.release()
+    return cv2.convertScaleAbs(avgImg)
+
+i,w,h,r,c,cc = readVideo('input.avi')
+print '[WIDTH] ', w
+print '[HEIGHT]', h
+print '[RATE]  ', r
+print '[FRAMES]', c
+print '[FOURCC]', cc
 
 o = extractBackground(i,c)
 ## create array to store image of warped football field
