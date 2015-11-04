@@ -15,20 +15,6 @@ def readVideo(inputPath):
     frameFourCC = int(cap.get(cv2.cv.CV_CAP_PROP_FOURCC))
     return cap, frameWidth, frameHeight, frameRate, frameCount, frameFourCC
 
-def extractBackground(videoStream, frameCount):
-    _,img = videoStream.read()
-    avgImg = np.float32(img)
-    #vr = cv2.VideoWriter('output.avi', cv2.cv.CV_FOURCC("M","P","4","2"), r, (w,h))
-    for fr in range(1,100): # TODO: change back to frameCount
-        _,img = videoStream.read()
-        avgImg = avgImg * ((fr)/float(fr+1)) + ( np.float32(img) / (fr + 1) );
-        normImg = cv2.convertScaleAbs(avgImg) # convert into uint8 image
-        #vr.write(normImg)
-        #cv2.imshow('img',img)
-        #cv2.imshow('normImg', normImg)
-    #vr.release()
-    return cv2.convertScaleAbs(avgImg)
-
 i,w,h,r,c,cc = readVideo('input.avi')
 print '[WIDTH] ', w
 print '[HEIGHT]', h
@@ -60,7 +46,6 @@ class ClicksCaptor:
             if key == 27 or self.nClicks >= 4:
                 break
 
-o = extractBackground(i,c)
 ## create array to store image of warped football field
 ## 1112 x 745
 field = np.zeros([1112,745])
@@ -87,6 +72,5 @@ print Hmatrix
 #print M
 o2 = cv2.warpPerspective(o, Hmatrix, field.shape)
 cv2.imwrite('outpu2.jpg', o2)
-cv2.imwrite('output.jpg', o)
-print len(o), len(o[0])
+print len(o[0])
 i.release()
