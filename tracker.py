@@ -3,10 +3,42 @@ import cv2.cv as cv
 import numpy as np
 import os
 
+def extract(hsv, lower, upper):
+    mask = cv2.inRange(hsv, lower, upper)
+    masked = cv2.bitwise_and(hsv, hsv, mask=mask)
+    h,_,_ = cv2.split(masked)
+    h = cv2.GaussianBlur(h, (15,15), 1)
+    kernel = np.ones([5,3], np.uint8)
+    h = cv2.dilate(h, kernel, iterations=3)
+
+    result = []
+    contours, hierarchy = cv2.findContours(h, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    for c in contours:
+        if cv2.contourArea(c) < 80:
+            continue
+        moment = cv2.moments(c)
+        if moment['m00'] == 0:
+            continue
+        x = int(moment['m10'] / moment['m00'])
+        y = int(moment['m01'] / moment['m00'])
+        #result.append((x,y))
+        #cv2.circle(frame, (x,y), 20, (0, 0, 255), 2)
+        #rx, ry, rw, rh = cv2.boundingRect(c)
+        #cv2.rectangle(frame, (rx,ry), (rx+rw, ry+rh), c, 2)
+        result.append(cv2.boundingRect(c))
+    return result
+
+def draw(frame, coord, color):
+    for points in coord:
+        #cv2.circle(frame, points, 20, (0, 0, 255), 2)
+        rx, ry, rw, rh = points
+        cv2.rectangle(frame, (rx,ry), (rx+rw, ry+rh), color, 2)
+    return frame
+
 def track(video, bg):
     # mask to remove everything outside the field
     mask = np.zeros(bg.shape, np.uint8)
-    corners = np.array([[1925, 159], [3423, 150],[5612, 664], [100, 673]])
+    corners = np.array([[1870, 159], [3500, 150],[5750, 650], [100, 650]])
     cv2.fillPoly(mask, [corners.reshape((-1,1,2))], (255, 255, 255))
 
     reader = cv2.VideoCapture(video)
@@ -14,37 +46,41 @@ def track(video, bg):
     codec = cv.CV_FOURCC('M', 'P', '4', '2')
     writer = cv2.VideoWriter("test.avi", codec, 24, (width, height), True)
 
-    for i in range(0, 120):
+    red1 = np.array([0, 100, 100])
+    red2 = np.array([10, 255, 255])
+    blue1 = np.array([100, 30, 0])
+    blue2 = np.array([130, 255, 255])
+    yellow1 = np.array([30, 100, 210])
+    yellow2 = np.array([50, 140, 255])
+    fc = 240
+    for i in range(0, fc):
+        print "Processing frame ", i, " of ", fc
         _, frame = reader.read()
-        masked = cv2.bitwise_and(mask, frame)
+        # remove background and everything outside the field
+        diff = cv2.absdiff(frame, bg)
+        field_bgs = cv2.bitwise_and(mask, diff)
+        field = cv2.bitwise_and(mask, frame)
 
-        # convert bgr to hsv
-        hsv = cv2.cvtColor(masked, cv2.COLOR_BGR2HSV)
+        hsv = cv2.cvtColor(field_bgs, cv2.COLOR_BGR2HSV)
+        h,s,v = cv2.split(hsv)
+        _, v = cv2.threshold(v, 60, 255, cv2.THRESH_BINARY)
+        #v = cv2.GaussianBlur(v, (33, 33), 3)
 
-        # define range of blue color in HSV
-        lower_blue = np.array([110,50,50])
-        upper_blue = np.array([130,255,255])
+        field = cv2.bitwise_and(field, field, mask=v)
+        hsv = cv2.cvtColor(field, cv2.COLOR_BGR2HSV)
 
-        # Threshold the HSV image to get only blue colors
-        bmask = cv2.inRange(hsv, lower_blue, upper_blue)
+        red_players = extract(hsv, red1, red2)
+        blue_players = extract(hsv, blue1, blue2)
+        yellow_players = extract(hsv, yellow1, yellow2)
 
-        # Bitwise-AND blue mask and original image
-        res = cv2.bitwise_and(masked, masked, mask=bmask)
+        draw(frame, red_players, (0,0,255))
+        draw(frame, blue_players, (255,0,0))
+        draw(frame, yellow_players, (255,255,0))
 
-        h, s, v = cv2.split(res)
-        countours, hier = cv2.findContours(h, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        for c in countours:
-            moment = cv2.moments(c)
-            if moment['m00'] == 0:
-                continue
-            x = int(moment['m10'] / moment['m00'])
-            y = int(moment['m01'] / moment['m00'])
-            cv2.circle(frame, (x, y), 20, (255, 0, 0), 2)
+        #cv2.imwrite("testing.png", field)
         writer.write(frame)
-
     reader.release()
     writer.release()
-
 
 def main():
     video = os.getcwd() + "/input.avi"
