@@ -14,7 +14,7 @@ def extract(hsv, lower, upper):
     result = []
     contours, hierarchy = cv2.findContours(h, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     for c in contours:
-        if cv2.contourArea(c) < 80:
+        if cv2.contourArea(c) < 250:
             continue
         moment = cv2.moments(c)
         if moment['m00'] == 0:
@@ -25,13 +25,15 @@ def extract(hsv, lower, upper):
         #cv2.circle(frame, (x,y), 20, (0, 0, 255), 2)
         #rx, ry, rw, rh = cv2.boundingRect(c)
         #cv2.rectangle(frame, (rx,ry), (rx+rw, ry+rh), c, 2)
-        result.append(cv2.boundingRect(c))
+        x,y,w,h = cv2.boundingRect(c)
+        result.append((x,y,w,h,cv2.contourArea(c)))
     return result
 
 def draw(frame, coord, color):
     for points in coord:
         #cv2.circle(frame, points, 20, (0, 0, 255), 2)
-        rx, ry, rw, rh = points
+        rx, ry, rw, rh, a = points
+        cv2.putText(frame, str(a), (rx,ry+rh), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,255))
         cv2.rectangle(frame, (rx,ry), (rx+rw, ry+rh), color, 2)
     return frame
 
@@ -46,13 +48,13 @@ def track(video, bg):
     codec = cv.CV_FOURCC('M', 'P', '4', '2')
     writer = cv2.VideoWriter("test.avi", codec, 24, (width, height), True)
 
-    red1 = np.array([0, 100, 100])
+    red1 = np.array([0, 80, 80])
     red2 = np.array([10, 255, 255])
-    blue1 = np.array([100, 30, 0])
+    blue1 = np.array([100, 30, 10])
     blue2 = np.array([130, 255, 255])
     yellow1 = np.array([30, 100, 210])
     yellow2 = np.array([50, 140, 255])
-    fc = 240
+    fc = 120
     for i in range(0, fc):
         print "Processing frame ", i, " of ", fc
         _, frame = reader.read()
