@@ -5,15 +5,21 @@ import os
 
 ### preparation for perform_homography
 field = np.zeros([1112,745])
+
 fieldCoordsArray = [(float(0), float(0)),(float(1112), float(0)),(float(1112), float(745)),(float(0), float(745))]
 fieldCoords = [fieldCoordsArray[0], fieldCoordsArray[1], fieldCoordsArray[2], fieldCoordsArray[3]]
-birdsEyeCoordsArray = [(float(1930),float(156)),(float(3418), float(146)),(float(5770),float(690)),(float(0), float(690))]
-birdEyeCoords = [birdsEyeCoordsArray[0], birdsEyeCoordsArray[1], birdsEyeCoordsArray[2], birdsEyeCoordsArray[3]]
-Hmatrix, status = cv2.findHomography(np.array(birdEyeCoords), np.array(fieldCoords), 0)
 
-### input is an image that will be transformed according to Hmatrix at top of file
-def perform_homography(input):
+cornersArray = [(float(1930),float(156)),(float(3418), float(146)),(float(5770),float(690)),(float(0), float(690))]
+corners = [cornersArray[0], cornersArray[1], cornersArray[2], cornersArray[3]]
+
+#fullImageCoordsArray = [(float(0),float(0)),(float(3418), float(146)),(float(5770),float(690)),(float(0), float(690))]
+Hmatrix, status = cv2.findHomography(np.array(corners), np.array(fieldCoords), 0)
+HmatrixInverse, status = cv2.findHomography(np.array(fieldCoords), np.array(corners), 0)
+
+def perform_homography(inputImage):
     return cv2.warpPerspective(inputImage, Hmatrix, field.shape)
+def perform_inv_homography(inputImage):
+    return cv2.warpPerspective(inputImage, HmatrixInverse, field.shape)
 
 # Performs closest pair matching between two sets of coordinates
 # Returns a list of coordinates with length = len(pts1)
