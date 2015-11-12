@@ -3,7 +3,11 @@ import cv2.cv as cv
 import numpy as np
 import os
 
-def estimate_points(pts1, pts2):
+
+
+# Performs closest pair matching between two sets of coordinates
+# Returns a list of coordinates with length = len(pts1)
+def estimate_points(pts1, pts2, max_distance=50):
     #if len(pts1) == len(pts2): return pts2
     candidates = [[] for i in pts1]
     picked = [False for i in pts2]
@@ -12,7 +16,7 @@ def estimate_points(pts1, pts2):
     for i,p1 in enumerate(pts1):
         for j,p2 in enumerate(pts2):
             d = np.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
-            if d < 50:
+            if d < max_distance:
                 candidates[i].append((d, j))
     for i,point in enumerate(pts1):
         i = int(i)
@@ -33,18 +37,21 @@ def estimate_points(pts1, pts2):
                 result[i] = pts1[i]
     return result
 
-def extract(hsv, lower, upper):
-    mask = cv2.inRange(hsv, lower, upper)
-    masked = cv2.bitwise_and(hsv, hsv, mask=mask)
-    h,_,_ = cv2.split(masked)
-    h = cv2.GaussianBlur(h, (33,33), 1)
+# Given an image (frame), find the centroid of contours within a certain color range
+# returns the resulting list of coordinates and the mask of the selected range
+def extract_points(frame, points, color_range, max_distance=50, size=150):
+    mask = cv2.inRange(frame, color_range[0], color_range[1])
+    masked = cv2.bitwise_and(frame, frame, mask=mask)
+    h,s,v = cv2.split(masked)
+
+    blurred = cv2.GaussianBlur(h, (33,33), 1)
     kernel = np.ones([5,3], np.uint8)
-    h = cv2.dilate(h, kernel, iterations=3)
+    dilated = cv2.dilate(blurred, kernel, iterations=3)
 
     result = []
-    contours, hierarchy = cv2.findContours(h, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    contours, hierarchy = cv2.findContours(dilated, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     for c in contours:
-        if cv2.contourArea(c) < 150:
+        if cv2.contourArea(c) < size:
             continue
         moment = cv2.moments(c)
         if moment['m00'] == 0:
@@ -52,6 +59,9 @@ def extract(hsv, lower, upper):
         x = int(moment['m10'] / moment['m00'])
         y = int(moment['m01'] / moment['m00'])
         result.append((x,y))
+
+    result = result if len(points) == 0 else estimate_points(points[-1], result, max_distance)
+    points.append(result)
     return result
 
 def draw(frame, coord, color):
@@ -71,51 +81,54 @@ def track(video, bg):
     reader = cv2.VideoCapture(video)
     height, width, _ = bg.shape
     codec = cv.CV_FOURCC('M', 'P', '4', '2')
-    writer = cv2.VideoWriter("test.avi", codec, 24, (width, height), True)
+    writer = cv2.VideoWriter("test1.avi", codec, 24, (width, height), True)
 
-    red1 = np.array([0, 80, 80])
-    red2 = np.array([15, 255, 255])
-    blue1 = np.array([95, 30, 30])
-    blue2 = np.array([145, 255, 255])
-    yellow1 = np.array([30, 100, 210])
-    yellow2 = np.array([50, 140, 255])
+    red_range = np.array([[0, 80, 80],[15,255,255]])
+    blue_range = np.array([[95, 30, 30],[145,255,255]])
+    yellow_range = np.array([[35, 130, 130],[40,255,255]])
+    green_range = np.array([[45, 100, 100],[50,255,255]])
+    white_range = np.array([[30, 15, 200],[40,25,220]])
+    ball_range = np.array([[30, 30, 150],[40,90,185]])
 
     blue = []
     red = []
-    fc = 1200
+    yellow = []
+    green = []
+    white = []
+    ball = [[(3174,213)]]
+
+    fc = 7200
     for i in range(0, fc):
         print "Processing frame ", i, " of ", fc
         _, frame = reader.read()
-
-        # remove background and everything outside the field
-        #diff = cv2.absdiff(frame, bg)
+        #cv2.imwrite("testing.png", frame)
+        #remove background and everything outside the field
         #diff = cv2.bitwise_and(diff, diff, mask=mask)
         field = cv2.bitwise_and(mask, frame)
 
-        hsv = cv2.cvtColor(field, cv2.COLOR_BGR2HSV)
-        h,s,v = cv2.split(hsv)
+        subtracted = cv2.absdiff(frame, bg)
+        subtracted_hsv = cv2.cvtColor(subtracted, cv2.COLOR_BGR2HSV)
+        h,s,v = cv2.split(subtracted_hsv)
         _, v = cv2.threshold(v, 50, 255, cv2.THRESH_BINARY)
-        #v = cv2.GaussianBlur(v, (33, 33), 3)
 
         field = cv2.bitwise_and(field, field, mask=v)
         hsv = cv2.cvtColor(field, cv2.COLOR_BGR2HSV)
 
-        bplayers = extract(hsv, blue1, blue2)
-        bplayers = bplayers if len(blue) == 0 else estimate_points(blue[-1], bplayers)
-        blue.append(bplayers)
-        draw(frame, bplayers, (255,0,0))
+        bpoints = extract_points(hsv, blue, blue_range)
+        rpoints = extract_points(hsv, red, red_range)
+        gpoints = extract_points(hsv, green, green_range)
+        ypoints = extract_points(hsv, yellow, yellow_range)
+        wpoints = extract_points(hsv, white, white_range)
+        #ball_points = [(3174,213)] if i==0 else extract_points(hsv, ball, ball_range, size=100)
+        #draw(frame, ball_points, (255,0,255))
+        draw(frame, bpoints, (255,0,0))
+        draw(frame, rpoints, (0,0,255))
+        draw(frame, gpoints, (0,255,0))
+        draw(frame, ypoints, (150,255,150))
+        draw(frame, wpoints, (255,255,255))
 
-        rplayers = extract(hsv, red1, red2)
-        rplayers = rplayers if len(red) == 0 else estimate_points(red[-1], rplayers)
-        red.append(rplayers)
-        draw(frame, rplayers, (0,0,255))
-
-        #draw(frame, red_players, (0,0,255))
-        #red_players = extract(hsv, red1, red2)
-        #draw(frame, yellow_players, (255,255,0))
-        #yellow_players = extract(hsv, yellow1, yellow2)
-
-        #cv2.imwrite("testing.png", frame)
+        #if i > 155:
+        #    cv2.imwrite("testing.png", field)
         writer.write(frame)
     reader.release()
     writer.release()
