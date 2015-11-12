@@ -7,7 +7,7 @@ import os
 
 # Performs closest pair matching between two sets of coordinates
 # Returns a list of coordinates with length = len(pts1)
-def estimate_points(pts1, pts2, max_distance=50):
+def estimate_points(pts1, pts2, max_distance=80):
     #if len(pts1) == len(pts2): return pts2
     candidates = [[] for i in pts1]
     picked = [False for i in pts2]
@@ -31,15 +31,15 @@ def estimate_points(pts1, pts2, max_distance=50):
                 result[i] = pts2[j]
                 break
         if result[i] == None:
-            if len(candidates[i]) > 0:
-                result[i] = pts2[candidates[i][0][1]]
-            else:
+            #if len(candidates[i]) > 0:
+            #    result[i] = pts2[candidates[i][0][1]]
+            #else:
                 result[i] = pts1[i]
     return result
 
 # Given an image (frame), find the centroid of contours within a certain color range
 # returns the resulting list of coordinates and the mask of the selected range
-def extract_points(frame, points, color_range, max_distance=50, size=150):
+def extract_points(frame, points, color_range, max_distance=80, size=150):
     mask = cv2.inRange(frame, color_range[0], color_range[1])
     masked = cv2.bitwise_and(frame, frame, mask=mask)
     h,s,v = cv2.split(masked)
@@ -75,15 +75,15 @@ def draw(frame, coord, color):
 def track(video, bg):
     # mask to remove everything outside the field
     mask = np.zeros(bg.shape, np.uint8)
-    corners = np.array([[1870, 159], [3495, 150],[5750, 650], [100, 650]])
+    corners = np.array([[1870, 153], [3490, 144],[5750, 650], [100, 650]])
     cv2.fillPoly(mask, [corners.reshape((-1,1,2))], (255, 255, 255))
 
     reader = cv2.VideoCapture(video)
     height, width, _ = bg.shape
     codec = cv.CV_FOURCC('M', 'P', '4', '2')
-    writer = cv2.VideoWriter("test1.avi", codec, 24, (width, height), True)
+    writer = cv2.VideoWriter("test.avi", codec, 24, (width, height), True)
 
-    red_range = np.array([[0, 80, 80],[15,255,255]])
+    red_range = np.array([[0, 80, 120],[15,255,255]])
     blue_range = np.array([[95, 30, 30],[145,255,255]])
     yellow_range = np.array([[35, 130, 130],[40,255,255]])
     green_range = np.array([[45, 100, 100],[50,255,255]])
@@ -97,10 +97,11 @@ def track(video, bg):
     white = []
     ball = [[(3174,213)]]
 
-    fc = 7200
+    fc = 2000
     for i in range(0, fc):
         print "Processing frame ", i, " of ", fc
         _, frame = reader.read()
+        if i < 1500: continue
         #cv2.imwrite("testing.png", frame)
         #remove background and everything outside the field
         #diff = cv2.bitwise_and(diff, diff, mask=mask)
@@ -128,7 +129,7 @@ def track(video, bg):
         draw(frame, wpoints, (255,255,255))
 
         #if i > 155:
-        #    cv2.imwrite("testing.png", field)
+        #cv2.imwrite("testing.png", frame)
         writer.write(frame)
     reader.release()
     writer.release()
