@@ -111,7 +111,7 @@ def track(video, bg):
     for i in range(0, fc):
         print "Processing frame ", i, " of ", fc
         _, frame = reader.read()
-        if i < 1500: continue
+        #if i < 1500: continue
         #cv2.imwrite("testing.png", frame)
         #remove background and everything outside the field
         #diff = cv2.bitwise_and(diff, diff, mask=mask)
