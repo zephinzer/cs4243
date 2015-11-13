@@ -10,12 +10,15 @@ def img_homography(img, inverse=False):
     h = IHmatrix if inverse else Hmatrix
     return cv2.warpPerspective(inputImage, Hmatrix, (1112, 745))
 
-# takes in a list of coordinates
-def coord_homography(coord_list, inverse=False):
-    res = []
+def coord_homography(p, inverse=False):
     matrix = IHmatrix if inverse else Hmatrix
+    q = matrix * np.matrix([[p[0]],[p[1]],[1]])
+    q /= q[2]
+    return ( int(q.item(0)), int(q.item(1)) )
+
+# takes in a list of coordinates
+def coord_list_homography(coord_list, inverse=False):
+    res = []
     for p in coord_list:
-        q = matrix * np.matrix([[p[0]],[p[1]],[1]])
-        q /= q[2]
-        res.append( (int(q.item(0)), int(q.item(1))) )
+        res.append(coord_homography(p, inverse))
     return res

@@ -3,7 +3,7 @@ import cv2.cv as cv
 import numpy as np
 import os
 import homography as hm
-from math import factorial
+import math
 
 def smoothen(points, window_size=3):
     i = len(points[0]) - 1
@@ -18,20 +18,6 @@ def smoothen(points, window_size=3):
         res.append([x,y])
     return res
 
-def moving_average2(points, window_size=3):
-    res = []
-    for i in range(0, len(points)):
-        # get weighted sum of current and n-1 previous
-        minimum = 0 if i - window_size < 0 else i - window_size + 1
-        arr = points[minimum:i+1]
-        total_x = 0
-        total_y = 0
-        for j in arr:
-            total_x += j[0]
-            total_y += j[1]
-        res.append( [[int(total_x/len(arr)), int(total_y/len(arr))]] )
-    return res
-
 # returns a list of [list of points per player]
 def homographed_points(pts):
     pts = np.array(pts)
@@ -40,8 +26,7 @@ def homographed_points(pts):
     # for each column(player),
     for i in range(0, w):
         player = pts[:,i]
-        p = hm.coord_homography(player)
-        #res.append(moving_average2(p))
+        p = hm.coord_list_homography(player)
         res.append(p)
     return np.hstack(res)
 
@@ -54,6 +39,7 @@ def estimate_points(pts, pts2, max_distance=50):
     picked = [False for i in pts2]
     result = [None for i in pts1]
 
+    #assign candidate points for each points in the previous frame
     for i,p1 in enumerate(pts1):
         for j,p2 in enumerate(pts2):
             d = np.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
@@ -64,7 +50,6 @@ def estimate_points(pts, pts2, max_distance=50):
         candidates[i].sort()
         for candidate in candidates[i]:
             j = candidate[1]
-            #if j >= len(pts1): continue
             if picked[j]:
                 continue
             else:
@@ -73,18 +58,16 @@ def estimate_points(pts, pts2, max_distance=50):
                 break
         if result[i] == None:
             if len(candidates[i]) > 0:
-                result[i] = pts2[candidates[i][0][1]]
+                dx = math.ceil((pts2[candidates[i][0][1]][0] - point[0])*0.2)
+                dy = math.ceil((pts2[candidates[i][0][1]][1] - point[1])*0.2)
+                result[i] = (point[0]+dx, point[1]+dy)
             else:
-                result[i] = pts1[i]
-            #if len(pts) >= 2:
-            #    x = result[i][0] + 0.2 * (pts1[i][0] - pts[-2][i][0])
-            #    y = result[i][0] + 0.2 * (pts1[i][1] - pts[-2][i][1])
-            #    result[i] = [x, y]
+                result[i] = point
     return result
 
 # Given an image (frame), find the centroid of contours within a certain color range
 # returns the resulting list of coordinates and the mask of the selected range
-def extract_points(frame, points, color_range, max_distance=45, size=150):
+def extract_points(frame, points, color_range, max_distance=50, size=150):
     mask = cv2.inRange(frame, color_range[0], color_range[1])
     masked = cv2.bitwise_and(frame, frame, mask=mask)
     h,s,v = cv2.split(masked)
@@ -105,7 +88,7 @@ def extract_points(frame, points, color_range, max_distance=45, size=150):
         y = int(moment['m01'] / moment['m00'])
         result.append((x,y))
 
-    result = hm.coord_homography(result)
+    result = hm.coord_list_homography(result)
     result = result if len(points) == 0 else estimate_points(points, result, max_distance)
     points.append(result)
     return result
@@ -119,7 +102,9 @@ def offside_line(players, side=0):
     p = sorted(players)
     coord = p[1] if side == 0 else p[-2]
     x = coord[0]
-    return hm.coord_homography([[x,0],[x,1112]], inverse=True)
+    p1 = hm.coord_homography((x,10), inverse=True)
+    p2 = hm.coord_homography((x,745), inverse=True)
+    return [p1,p2]
 
 def track(video, bg):
     # mask to remove everything outside the field
@@ -168,44 +153,21 @@ def track(video, bg):
         extract_points(hsv, green, green_range)
         extract_points(hsv, yellow, yellow_range)
         extract_points(hsv, white, white_range)
-        #print len(blue[-1])
-        #draw_bev(frame, blue[-1], (255, 0, 0))
-        #draw_bev(frame, red[-1], (0, 0, 255))
-        #draw_bev(frame, green[-1], (0, 255, 0))
-        #draw_bev(frame, white[-1], (255, 255, 255))
-        #draw_bev(frame, yellow[-1], (140, 255, 100))
+
         bebg = _bg.copy()
         draw_bev(bebg, smoothen(blue), (255, 0, 0))
         draw_bev(bebg, smoothen(red), (0, 0, 255))
         draw_bev(bebg, smoothen(green), (0, 255, 0))
         draw_bev(bebg, smoothen(white), (255, 255, 255))
         draw_bev(bebg, smoothen(yellow), (140, 255, 100))
-        #cv2.imwrite("test.png", frame)
-        writer.write(bebg)
 
         redlines = offside_line(red[-1] + white[-1])
         bluelines = offside_line(blue[-1] + green[-1], side=1)
         cv2.line(frame, bluelines[0], bluelines[1], (255,0,0), thickness=2)
         cv2.line(frame, redlines[0], redlines[1], (0,0,255), thickness=2)
-        writer2.write(frame)
 
-    #blue = homographed_points(blue)
-    #red = homographed_points(red)
-    #green = homographed_points(green)
-    #white = homographed_points(white)
-    #yellow = homographed_points(yellow)
-
-    '''
-    for i in range(0, fc):
-        bebg = _bg.copy()
-        draw_bev(bebg, blue[i], (255, 0, 0))
-        draw_bev(bebg, red[i], (0, 0, 255))
-        draw_bev(bebg, green[i], (0, 255, 0))
-        draw_bev(bebg, white[i], (255, 255, 255))
-        draw_bev(bebg, yellow[i], (140, 255, 100))
         writer.write(bebg)
-    '''
-
+        writer2.write(frame)
     reader.release()
     writer.release()
     writer2.release()
