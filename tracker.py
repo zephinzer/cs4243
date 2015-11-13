@@ -118,8 +118,8 @@ def track(video, bg):
     reader = cv2.VideoCapture(video)
     height, width, _ = bg.shape
     codec = cv.CV_FOURCC('M', 'P', '4', '2')
-    writer = cv2.VideoWriter("testing1.avi", codec, 24, (w, h), True)
-    writer2 = cv2.VideoWriter("testing2.avi", codec, 24, (width, height), True)
+    writer = cv2.VideoWriter("Topdown.avi", codec, 24, (w, h), True)
+    writer2 = cv2.VideoWriter("Offside.avi", codec, 24, (width, height), True)
 
     red_range = np.array([[0, 50, 120],[15,255,255]])
     blue_range = np.array([[90, 30, 30],[140,255,255]])
