@@ -163,9 +163,10 @@ def track(video, bg):
 
         redlines = offside_line(red[-1] + white[-1])
         bluelines = offside_line(blue[-1] + green[-1], side=1)
-        cv2.line(frame, bluelines[0], bluelines[1], (255,0,0), thickness=2)
-        cv2.line(frame, redlines[0], redlines[1], (0,0,255), thickness=2)
-
+        if (bluelines[1][0] > (width*2/3)):
+            cv2.line(frame, bluelines[0], bluelines[1], (255,0,0), thickness=2)
+        if (redlines[1][0] < (width/3)):
+            cv2.line(frame, redlines[0], redlines[1], (0,0,255), thickness=2)
         writer.write(bebg)
         writer2.write(frame)
     reader.release()
