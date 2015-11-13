@@ -13,7 +13,7 @@ def img_homography(img, inverse=False):
 # takes in a list of coordinates
 def coord_homography(coord_list, inverse=False):
     res = []
-    matrix = HmatrixInverse if inverse else Hmatrix
+    matrix = IHmatrix if inverse else Hmatrix
     for p in coord_list:
         q = matrix * np.matrix([[p[0]],[p[1]],[1]])
         q /= q[2]

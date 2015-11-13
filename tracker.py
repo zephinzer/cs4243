@@ -5,22 +5,20 @@ import os
 import homography as hm
 from math import factorial
 
-def moving_average(points, window_size=5):
+def smoothen(points, window_size=3):
+    i = len(points[0]) - 1
+    points = np.array(points)
     res = []
-    half_window = window_size/2
-
-    res += points[0:half_window]
-    for i in range(half_window, len(points)-half_window):
-        total_x = 0
-        total_y = 0
-        for j in range(-half_window, half_window):
-            total_x += points[i+j][0]
-            total_y += points[i+j][1]
-        res.append( (int(total_x/window_size), int(total_y/window_size)) )
-    res += points[len(points)-half_window:]
+    for i in range(0, len(points[0])):
+        p = points[:,i]
+        l = window_size if len(p) < window_size else len(p)
+        subpoints = p[len(p)-window_size:]
+        x = np.mean(subpoints[:,0])
+        y = np.mean(subpoints[:,1])
+        res.append([x,y])
     return res
 
-def moving_average2(points, window_size=11):
+def moving_average2(points, window_size=3):
     res = []
     for i in range(0, len(points)):
         # get weighted sum of current and n-1 previous
@@ -43,12 +41,13 @@ def homographed_points(pts):
     for i in range(0, w):
         player = pts[:,i]
         p = hm.coord_homography(player)
-        res.append(moving_average2(p))
+        #res.append(moving_average2(p))
+        res.append(p)
     return np.hstack(res)
 
 # Performs closest pair matching between two sets of coordinates
 # Returns a list of coordinates with length = len(pts1)
-def estimate_points(pts, pts2, max_distance=80):
+def estimate_points(pts, pts2, max_distance=50):
     pts1 = pts[-1]
     #if len(pts1) == len(pts2): return pts2
     candidates = [[] for i in pts1]
@@ -75,18 +74,17 @@ def estimate_points(pts, pts2, max_distance=80):
         if result[i] == None:
             if len(candidates[i]) > 0:
                 result[i] = pts2[candidates[i][0][1]]
-            #else:
-            #if len(pts) > 2:
-            #    dx = 0.2 * (pts1[i][0] - pts[-2][i][0])
-            #    dy = 0.2 * (pts1[i][1] - pts[-2][i][1])
-            #    result[i] = [pts1[i][0] + dx, pts1[i][0] + dy]
             else:
                 result[i] = pts1[i]
+            #if len(pts) >= 2:
+            #    x = result[i][0] + 0.2 * (pts1[i][0] - pts[-2][i][0])
+            #    y = result[i][0] + 0.2 * (pts1[i][1] - pts[-2][i][1])
+            #    result[i] = [x, y]
     return result
 
 # Given an image (frame), find the centroid of contours within a certain color range
 # returns the resulting list of coordinates and the mask of the selected range
-def extract_points(frame, points, color_range, max_distance=80, size=150):
+def extract_points(frame, points, color_range, max_distance=45, size=150):
     mask = cv2.inRange(frame, color_range[0], color_range[1])
     masked = cv2.bitwise_and(frame, frame, mask=mask)
     h,s,v = cv2.split(masked)
@@ -107,6 +105,7 @@ def extract_points(frame, points, color_range, max_distance=80, size=150):
         y = int(moment['m01'] / moment['m00'])
         result.append((x,y))
 
+    result = hm.coord_homography(result)
     result = result if len(points) == 0 else estimate_points(points, result, max_distance)
     points.append(result)
     return result
@@ -114,6 +113,13 @@ def extract_points(frame, points, color_range, max_distance=80, size=150):
 def draw_bev(frame, points, color):
     for point in points:
         cv2.circle(frame, (int(point[0]), int(point[1])), 10, color, -1)
+
+# 0 if defending side is on the left, otherwise right
+def offside_line(players, side=0):
+    p = sorted(players)
+    coord = p[1] if side == 0 else p[-2]
+    x = coord[0]
+    return hm.coord_homography([[x,0],[x,1112]], inverse=True)
 
 def track(video, bg):
     # mask to remove everything outside the field
@@ -127,8 +133,8 @@ def track(video, bg):
     reader = cv2.VideoCapture(video)
     height, width, _ = bg.shape
     codec = cv.CV_FOURCC('M', 'P', '4', '2')
+    writer = cv2.VideoWriter("testing1.avi", codec, 24, (w, h), True)
     writer2 = cv2.VideoWriter("testing2.avi", codec, 24, (width, height), True)
-    writer = cv2.VideoWriter("testing.avi", codec, 24, (w, h), True)
 
     red_range = np.array([[0, 50, 120],[15,255,255]])
     blue_range = np.array([[90, 30, 30],[140,255,255]])
@@ -142,9 +148,8 @@ def track(video, bg):
     yellow = []
     green = []
     white = []
-    ball = [[(3174,213)]]
 
-    fc = 2000
+    fc = 7200
     for i in range(0, fc):
         print "Processing frame ", i, " of ", fc
         _, frame = reader.read()
@@ -164,20 +169,33 @@ def track(video, bg):
         extract_points(hsv, yellow, yellow_range)
         extract_points(hsv, white, white_range)
         #print len(blue[-1])
-        draw_bev(frame, blue[-1], (255, 0, 0))
-        draw_bev(frame, red[-1], (0, 0, 255))
-        draw_bev(frame, green[-1], (0, 255, 0))
-        draw_bev(frame, white[-1], (255, 255, 255))
-        draw_bev(frame, yellow[-1], (140, 255, 100))
+        #draw_bev(frame, blue[-1], (255, 0, 0))
+        #draw_bev(frame, red[-1], (0, 0, 255))
+        #draw_bev(frame, green[-1], (0, 255, 0))
+        #draw_bev(frame, white[-1], (255, 255, 255))
+        #draw_bev(frame, yellow[-1], (140, 255, 100))
+        bebg = _bg.copy()
+        draw_bev(bebg, smoothen(blue), (255, 0, 0))
+        draw_bev(bebg, smoothen(red), (0, 0, 255))
+        draw_bev(bebg, smoothen(green), (0, 255, 0))
+        draw_bev(bebg, smoothen(white), (255, 255, 255))
+        draw_bev(bebg, smoothen(yellow), (140, 255, 100))
         #cv2.imwrite("test.png", frame)
+        writer.write(bebg)
+
+        redlines = offside_line(red[-1] + white[-1])
+        bluelines = offside_line(blue[-1] + green[-1], side=1)
+        cv2.line(frame, bluelines[0], bluelines[1], (255,0,0), thickness=2)
+        cv2.line(frame, redlines[0], redlines[1], (0,0,255), thickness=2)
         writer2.write(frame)
 
-    blue = homographed_points(blue)
-    red = homographed_points(red)
-    green = homographed_points(green)
-    white = homographed_points(white)
-    yellow = homographed_points(yellow)
+    #blue = homographed_points(blue)
+    #red = homographed_points(red)
+    #green = homographed_points(green)
+    #white = homographed_points(white)
+    #yellow = homographed_points(yellow)
 
+    '''
     for i in range(0, fc):
         bebg = _bg.copy()
         draw_bev(bebg, blue[i], (255, 0, 0))
@@ -186,6 +204,7 @@ def track(video, bg):
         draw_bev(bebg, white[i], (255, 255, 255))
         draw_bev(bebg, yellow[i], (140, 255, 100))
         writer.write(bebg)
+    '''
 
     reader.release()
     writer.release()
