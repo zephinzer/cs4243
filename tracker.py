@@ -2,28 +2,54 @@ import cv2
 import cv2.cv as cv
 import numpy as np
 import os
+import homography as hm
+from math import factorial
 
-### preparation for perform_homography
-field = np.zeros([1112,745])
+def moving_average(points, window_size=5):
+    res = []
+    half_window = window_size/2
 
-fieldCoordsArray = [(float(0), float(0)),(float(1112), float(0)),(float(1112), float(745)),(float(0), float(745))]
-fieldCoords = [fieldCoordsArray[0], fieldCoordsArray[1], fieldCoordsArray[2], fieldCoordsArray[3]]
+    res += points[0:half_window]
+    for i in range(half_window, len(points)-half_window):
+        total_x = 0
+        total_y = 0
+        for j in range(-half_window, half_window):
+            total_x += points[i+j][0]
+            total_y += points[i+j][1]
+        res.append( (int(total_x/window_size), int(total_y/window_size)) )
+    res += points[len(points)-half_window:]
+    return res
 
-cornersArray = [(float(1930),float(156)),(float(3418), float(146)),(float(5770),float(690)),(float(0), float(690))]
-corners = [cornersArray[0], cornersArray[1], cornersArray[2], cornersArray[3]]
+def moving_average2(points, window_size=11):
+    res = []
+    for i in range(0, len(points)):
+        # get weighted sum of current and n-1 previous
+        minimum = 0 if i - window_size < 0 else i - window_size + 1
+        arr = points[minimum:i+1]
+        total_x = 0
+        total_y = 0
+        for j in arr:
+            total_x += j[0]
+            total_y += j[1]
+        res.append( [[int(total_x/len(arr)), int(total_y/len(arr))]] )
+    return res
 
-#fullImageCoordsArray = [(float(0),float(0)),(float(3418), float(146)),(float(5770),float(690)),(float(0), float(690))]
-Hmatrix, status = cv2.findHomography(np.array(corners), np.array(fieldCoords), 0)
-HmatrixInverse, status = cv2.findHomography(np.array(fieldCoords), np.array(corners), 0)
-
-def perform_homography(inputImage):
-    return cv2.warpPerspective(inputImage, Hmatrix, field.shape)
-def perform_inv_homography(inputImage):
-    return cv2.warpPerspective(inputImage, HmatrixInverse, field.shape)
+# returns a list of [list of points per player]
+def homographed_points(pts):
+    pts = np.array(pts)
+    h, w, _ = pts.shape
+    res = []
+    # for each column(player),
+    for i in range(0, w):
+        player = pts[:,i]
+        p = hm.coord_homography(player)
+        res.append(moving_average2(p))
+    return np.hstack(res)
 
 # Performs closest pair matching between two sets of coordinates
 # Returns a list of coordinates with length = len(pts1)
-def estimate_points(pts1, pts2, max_distance=80):
+def estimate_points(pts, pts2, max_distance=80):
+    pts1 = pts[-1]
     #if len(pts1) == len(pts2): return pts2
     candidates = [[] for i in pts1]
     picked = [False for i in pts2]
@@ -47,9 +73,14 @@ def estimate_points(pts1, pts2, max_distance=80):
                 result[i] = pts2[j]
                 break
         if result[i] == None:
-            #if len(candidates[i]) > 0:
-            #    result[i] = pts2[candidates[i][0][1]]
+            if len(candidates[i]) > 0:
+                result[i] = pts2[candidates[i][0][1]]
             #else:
+            #if len(pts) > 2:
+            #    dx = 0.2 * (pts1[i][0] - pts[-2][i][0])
+            #    dy = 0.2 * (pts1[i][1] - pts[-2][i][1])
+            #    result[i] = [pts1[i][0] + dx, pts1[i][0] + dy]
+            else:
                 result[i] = pts1[i]
     return result
 
@@ -60,8 +91,8 @@ def extract_points(frame, points, color_range, max_distance=80, size=150):
     masked = cv2.bitwise_and(frame, frame, mask=mask)
     h,s,v = cv2.split(masked)
 
-    blurred = cv2.GaussianBlur(h, (33,33), 1)
-    kernel = np.ones([5,3], np.uint8)
+    blurred = cv2.GaussianBlur(h, (33,33), 3)
+    kernel = np.ones([3,3], np.uint8)
     dilated = cv2.dilate(blurred, kernel, iterations=3)
 
     result = []
@@ -76,17 +107,13 @@ def extract_points(frame, points, color_range, max_distance=80, size=150):
         y = int(moment['m01'] / moment['m00'])
         result.append((x,y))
 
-    result = result if len(points) == 0 else estimate_points(points[-1], result, max_distance)
+    result = result if len(points) == 0 else estimate_points(points, result, max_distance)
     points.append(result)
     return result
 
-def draw(frame, coord, color):
-    for points in coord:
-        cv2.circle(frame, points, 20, color, 2)
-        #rx, ry, rw, rh, a = points
-        #cv2.putText(frame, str(a), (rx,ry+rh), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0))
-        #cv2.rectangle(frame, (rx,ry), (rx+rw, ry+rh), color, 2)
-    return frame
+def draw_bev(frame, points, color):
+    for point in points:
+        cv2.circle(frame, (int(point[0]), int(point[1])), 10, color, -1)
 
 def track(video, bg):
     # mask to remove everything outside the field
@@ -94,16 +121,20 @@ def track(video, bg):
     corners = np.array([[1870, 153], [3490, 144],[5750, 650], [100, 650]])
     cv2.fillPoly(mask, [corners.reshape((-1,1,2))], (255, 255, 255))
 
+    _bg = cv2.imread("fakebg.png")
+    h, w, _ = _bg.shape
+
     reader = cv2.VideoCapture(video)
     height, width, _ = bg.shape
     codec = cv.CV_FOURCC('M', 'P', '4', '2')
-    writer = cv2.VideoWriter("test.avi", codec, 24, (width, height), True)
+    writer2 = cv2.VideoWriter("testing2.avi", codec, 24, (width, height), True)
+    writer = cv2.VideoWriter("testing.avi", codec, 24, (w, h), True)
 
-    red_range = np.array([[0, 80, 120],[15,255,255]])
-    blue_range = np.array([[95, 30, 30],[145,255,255]])
+    red_range = np.array([[0, 50, 120],[15,255,255]])
+    blue_range = np.array([[90, 30, 30],[140,255,255]])
     yellow_range = np.array([[35, 130, 130],[40,255,255]])
-    green_range = np.array([[45, 100, 100],[50,255,255]])
-    white_range = np.array([[30, 15, 200],[40,25,220]])
+    green_range = np.array([[45, 80, 80],[55,255,255]])
+    white_range = np.array([[30, 10, 200],[40,30,255]])
     ball_range = np.array([[30, 30, 150],[40,90,185]])
 
     blue = []
@@ -117,10 +148,6 @@ def track(video, bg):
     for i in range(0, fc):
         print "Processing frame ", i, " of ", fc
         _, frame = reader.read()
-        #if i < 1500: continue
-        #cv2.imwrite("testing.png", frame)
-        #remove background and everything outside the field
-        #diff = cv2.bitwise_and(diff, diff, mask=mask)
         field = cv2.bitwise_and(mask, frame)
 
         subtracted = cv2.absdiff(frame, bg)
@@ -131,24 +158,38 @@ def track(video, bg):
         field = cv2.bitwise_and(field, field, mask=v)
         hsv = cv2.cvtColor(field, cv2.COLOR_BGR2HSV)
 
-        bpoints = extract_points(hsv, blue, blue_range)
-        rpoints = extract_points(hsv, red, red_range)
-        gpoints = extract_points(hsv, green, green_range)
-        ypoints = extract_points(hsv, yellow, yellow_range)
-        wpoints = extract_points(hsv, white, white_range)
-        #ball_points = [(3174,213)] if i==0 else extract_points(hsv, ball, ball_range, size=100)
-        #draw(frame, ball_points, (255,0,255))
-        draw(frame, bpoints, (255,0,0))
-        draw(frame, rpoints, (0,0,255))
-        draw(frame, gpoints, (0,255,0))
-        draw(frame, ypoints, (150,255,150))
-        draw(frame, wpoints, (255,255,255))
+        extract_points(hsv, blue, blue_range)
+        extract_points(hsv, red, red_range)
+        extract_points(hsv, green, green_range)
+        extract_points(hsv, yellow, yellow_range)
+        extract_points(hsv, white, white_range)
+        #print len(blue[-1])
+        draw_bev(frame, blue[-1], (255, 0, 0))
+        draw_bev(frame, red[-1], (0, 0, 255))
+        draw_bev(frame, green[-1], (0, 255, 0))
+        draw_bev(frame, white[-1], (255, 255, 255))
+        draw_bev(frame, yellow[-1], (140, 255, 100))
+        #cv2.imwrite("test.png", frame)
+        writer2.write(frame)
 
-        #if i > 155:
-        #cv2.imwrite("testing.png", frame)
-        writer.write(frame)
+    blue = homographed_points(blue)
+    red = homographed_points(red)
+    green = homographed_points(green)
+    white = homographed_points(white)
+    yellow = homographed_points(yellow)
+
+    for i in range(0, fc):
+        bebg = _bg.copy()
+        draw_bev(bebg, blue[i], (255, 0, 0))
+        draw_bev(bebg, red[i], (0, 0, 255))
+        draw_bev(bebg, green[i], (0, 255, 0))
+        draw_bev(bebg, white[i], (255, 255, 255))
+        draw_bev(bebg, yellow[i], (140, 255, 100))
+        writer.write(bebg)
+
     reader.release()
     writer.release()
+    writer2.release()
 
 def main():
     video = os.getcwd() + "/input.avi"
